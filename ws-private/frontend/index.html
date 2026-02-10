@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebSocket Chat with Private Messages</title>
+  </head>
+  <body>
+    <div class="container">
+      <!-- Login Section -->
+      <div id="login-section" class="section">
+        <h1>🔐 Login to Chat</h1>
+        <form id="login-form">
+          <input type="text" id="username" placeholder="Enter your username" required />
+          <button type="submit">Login</button>
+        </form>
+      </div>
+
+      <!-- Chat Section -->
+      <div id="chat-section" class="section" style="display: none;">
+        <h1>💬 WebSocket Chat</h1>
+        <h3 id="user-info">Logged in as: <span id="current-user"></span></h3>
+
+        <!-- Chat Messages -->
+        <div class="chat-container">
+          <textarea
+            id="chatmessages"
+            readonly
+            placeholder="Messages will appear here..."
+          ></textarea>
+        </div>
+
+        <!-- Public Message Form -->
+        <div class="message-form">
+          <h3>📢 Public Message</h3>
+          <form id="public-message-form">
+            <input type="text" id="public-message" placeholder="Type a public message..." required />
+            <button type="submit">Send to All</button>
+          </form>
+        </div>
+
+        <!-- Private Message Form -->
+        <div class="message-form">
+          <h3>🔒 Private Message</h3>
+          <form id="private-message-form">
+            <input type="text" id="to-user" placeholder="Recipient username" required />
+            <input type="text" id="private-message" placeholder="Type a private message..." required />
+            <button type="submit">Send Private</button>
+          </form>
+        </div>
+
+        <!-- Online Users -->
+        <div class="users-section">
+          <h3>👥 Online Users</h3>
+          <div id="online-users"></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let conn;
+      let myUsername = "";
+
+      class Event {
+        constructor(type, payload) {
+          this.type = type;
+          this.payload = payload;
+        }
+      }
+
+      // إرسال event للـ server
+      function sendEvent(eventType, payload) {
+        const event = new Event(eventType, payload);
+        conn.send(JSON.stringify(event));
+      }
+
+      // معالجة الأحداث الواردة
+      function routeEvent(event) {
+        if (event.type === undefined) {
+          alert("No type field in the event");
+          return;
+        }
+
+        switch (event.type) {
+          case "new_message":
+            appendMessage(event.payload);
+            break;
+          default:
+            console.log("Unsupported message type:", event.type);
+            break;
+        }
+      }
+
+      // إضافة رسالة للـ chat
+      function appendMessage(payload) {
+        const chatArea = document.getElementById("chatmessages");
+        const message = `[${payload.sent}] ${payload.from}: ${payload.message}\n`;
+        chatArea.value += message;
+        chatArea.scrollTop = chatArea.scrollHeight;
+      }
+
+      // Login
+      function login(e) {
+        e.preventDefault();
+        const username = document.getElementById("username").value.trim();
+        
+        if (!username) {
+          alert("Please enter a username");
+          return;
+        }
+
+        myUsername = username;
+        
+        // إرسال login event
+        sendEvent("login", { username: username });
+
+        // إظهار Chat section
+        document.getElementById("login-section").style.display = "none";
+        document.getElementById("chat-section").style.display = "block";
+        document.getElementById("current-user").textContent = myUsername;
+      }
+
+      // إرسال Public Message
+      function sendPublicMessage(e) {
+        e.preventDefault();
+        const messageInput = document.getElementById("public-message");
+        const message = messageInput.value.trim();
+
+        if (!message) return;
+
+        sendEvent("send_message", {
+          message: message,
+          from: myUsername
+        });
+
+        messageInput.value = "";
+      }
+
+      // إرسال Private Message
+      function sendPrivateMessage(e) {
+        e.preventDefault();
+        const toUser = document.getElementById("to-user").value.trim();
+        const messageInput = document.getElementById("private-message");
+        const message = messageInput.value.trim();
+
+        if (!toUser || !message) {
+          alert("Please enter recipient and message");
+          return;
+        }
+
+        sendEvent("private_message", {
+          message: message,
+          from: myUsername,
+          to: toUser
+        });
+
+        messageInput.value = "";
+      }
+
+      // عند تحميل الصفحة
+      window.onload = function () {
+        // ربط الـ forms
+        document.getElementById("login-form").onsubmit = login;
+        document.getElementById("public-message-form").onsubmit = sendPublicMessage;
+        document.getElementById("private-message-form").onsubmit = sendPrivateMessage;
+
+        // التحقق من دعم WebSocket
+        if (window["WebSocket"]) {
+          console.log("✅ Browser supports WebSocket");
+
+          // الاتصال بالـ WebSocket
+          conn = new WebSocket("ws://" + document.location.host + "/ws");
+
+          conn.onopen = function () {
+            console.log("🔌 Connected to WebSocket");
+          };
+
+          conn.onmessage = function (evt) {
+            const eventData = JSON.parse(evt.data);
+            const event = Object.assign(new Event(), eventData);
+            routeEvent(event);
+          };
+
+          conn.onclose = function () {
+            console.log("❌ Connection closed");
+            alert("Connection lost. Please refresh the page.");
+          };
+
+          conn.onerror = function (err) {
+            console.log("❌ Connection error:", err);
+          };
+        } else {
+          alert("❌ Your browser doesn't support WebSocket");
+        }
+      };
+    </script>
+
+    <style type="text/css">
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+      }
+
+      .section {
+        background: white;
+        border-radius: 15px;
+        padding: 30px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      }
+
+      h1 {
+        color: #667eea;
+        margin-bottom: 20px;
+        text-align: center;
+      }
+
+      h3 {
+        color: #333;
+        margin: 15px 0 10px;
+      }
+
+      #user-info {
+        background: #f0f0f0;
+        padding: 10px;
+        border-radius: 8px;
+        text-align: center;
+        margin-bottom: 20px;
+      }
+
+      #current-user {
+        color: #667eea;
+        font-weight: bold;
+      }
+
+      form {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 15px;
+      }
+
+      input[type="text"] {
+        flex: 1;
+        padding: 12px;
+        border: 2px solid #ddd;
+        border-radius: 8px;
+        font-size: 14px;
+        transition: border-color 0.3s;
+      }
+
+      input[type="text"]:focus {
+        outline: none;
+        border-color: #667eea;
+      }
+
+      button {
+        padding: 12px 25px;
+        background: #667eea;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: bold;
+        transition: background 0.3s;
+      }
+
+      button:hover {
+        background: #5568d3;
+      }
+
+      .chat-container {
+        margin: 20px 0;
+      }
+
+      #chatmessages {
+        width: 100%;
+        height: 300px;
+        padding: 15px;
+        border: 2px solid #ddd;
+        border-radius: 8px;
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+        resize: vertical;
+        background: #f9f9f9;
+      }
+
+      .message-form {
+        background: #f8f8f8;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 15px;
+      }
+
+      .users-section {
+        background: #f0f0f0;
+        padding: 15px;
+        border-radius: 8px;
+        margin-top: 20px;
+      }
+
+      #online-users {
+        color: #666;
+        font-size: 14px;
+        margin-top: 10px;
+      }
+
+      #login-section input {
+        width: 100%;
+        margin-bottom: 15px;
+      }
+
+      #login-section button {
+        width: 100%;
+      }
+    </style>
+  </body>
+</html>

@@ -54,6 +54,7 @@
       }
       function sendEvent(eventMessge,payload) {
         const event =new Event(eventName,payload)
+        conn.send(JSON.stringify(event))
       }
       function changeCHatRoom() {
         var newChat = document.getElementById("chatroom");
@@ -65,7 +66,7 @@
       function sendMessage() {
         var newmessage = document.getElementById("message");
         if (newmessage != null) {
-          conn.send(newmessage.value);
+         sendEvent("send_messge",newmessage.value)
         }
         return false;
       }
@@ -77,7 +78,9 @@
           //   connet to ws
           conn = new WebSocket("ws://" + document.location.host + "/ws");
           conn.onmessage = function (evt) {
-            console.log(evt);
+            const eventData=JSON.parse(evt.data)
+            const event=Object.assign(new Event,eventData)
+            routeEvent(event)
           };
         } else {
           alert("kkkk");
